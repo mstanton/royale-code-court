@@ -1,0 +1,236 @@
+{
+  "name": "antimatter",
+  "displayName": "Antimatter - AI Code Validator",
+  "description": "Validate AI-generated code before you trust it. Powered by Royale Code Court.",
+  "version": "0.1.0",
+  "publisher": "royale-code-court",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code-validation",
+    "testing",
+    "security",
+    "sandbox"
+  ],
+  "icon": "resources/antimatter-icon.png",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onLanguage:python",
+    "onCommand:antimatter.validateSelection",
+    "onCommand:antimatter.validateFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "antimatter.validateSelection",
+        "title": "Antimatter: Validate Selection",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "antimatter.validateFile",
+        "title": "Antimatter: Validate File",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "antimatter.executeCode",
+        "title": "Antimatter: Execute in Sandbox",
+        "icon": "$(play)"
+      },
+      {
+        "command": "antimatter.checkSecurity",
+        "title": "Antimatter: Security Scan",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "antimatter.showStats",
+        "title": "Antimatter: Show Execution Stats",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "antimatter.startServer",
+        "title": "Antimatter: Start Validation Server"
+      },
+      {
+        "command": "antimatter.stopServer",
+        "title": "Antimatter: Stop Validation Server"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "antimatter.validateSelection",
+          "when": "editorHasSelection && editorLangId == python",
+          "group": "antimatter@1"
+        },
+        {
+          "command": "antimatter.executeCode",
+          "when": "editorHasSelection && editorLangId == python",
+          "group": "antimatter@2"
+        },
+        {
+          "command": "antimatter.checkSecurity",
+          "when": "editorHasSelection && editorLangId == python",
+          "group": "antimatter@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "antimatter.validateFile",
+          "when": "editorLangId == python",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "antimatter.validateSelection",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorTextFocus && editorLangId == python"
+      },
+      {
+        "command": "antimatter.executeCode",
+        "key": "ctrl+shift+x",
+        "mac": "cmd+shift+x",
+        "when": "editorTextFocus && editorLangId == python"
+      }
+    ],
+    "configuration": {
+      "title": "Antimatter",
+      "properties": {
+        "antimatter.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Path to Python interpreter"
+        },
+        "antimatter.jesterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Royale Code Court installation (leave empty for auto-detect)"
+        },
+        "antimatter.serverPort": {
+          "type": "number",
+          "default": 8765,
+          "description": "WebSocket server port for validation"
+        },
+        "antimatter.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start validation server on extension activation"
+        },
+        "antimatter.validateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically validate Python files on save"
+        },
+        "antimatter.showInlineResults": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show validation results inline in the editor"
+        },
+        "antimatter.executionTimeout": {
+          "type": "number",
+          "default": 5,
+          "description": "Timeout for code execution in seconds"
+        },
+        "antimatter.securityLevel": {
+          "type": "string",
+          "enum": ["strict", "permissive", "report-only"],
+          "default": "strict",
+          "description": "Security enforcement level"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "antimatter",
+          "title": "Antimatter",
+          "icon": "resources/antimatter-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "antimatter": [
+        {
+          "id": "antimatter.validationResults",
+          "name": "Validation Results"
+        },
+        {
+          "id": "antimatter.executionHistory",
+          "name": "Execution History"
+        },
+        {
+          "id": "antimatter.patterns",
+          "name": "Detected Patterns"
+        }
+      ]
+    },
+    "colors": [
+      {
+        "id": "antimatter.validBackground",
+        "description": "Background color for valid code",
+        "defaults": {
+          "dark": "#1a472a20",
+          "light": "#1a472a10"
+        }
+      },
+      {
+        "id": "antimatter.invalidBackground",
+        "description": "Background color for invalid code",
+        "defaults": {
+          "dark": "#8b000020",
+          "light": "#8b000010"
+        }
+      },
+      {
+        "id": "antimatter.warningBackground",
+        "description": "Background color for code with warnings",
+        "defaults": {
+          "dark": "#b8860b20",
+          "light": "#b8860b10"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.55.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mstanton/royale-code-court"
+  },
+  "license": "MIT"
+}
