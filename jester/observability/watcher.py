@@ -73,9 +73,10 @@ class RealmWatcher(FileSystemEventHandler):
     Calculates metrics on save and emits events.
     """
 
-    def __init__(self, event_stream: EventStream, root_path: str):
+    def __init__(self, event_stream: EventStream, root_path: str, realm_name: str = "Default"):
         self.event_stream = event_stream
         self.root_path = Path(root_path).resolve()
+        self.realm_name = realm_name
         self.observer = Observer()
         self._last_events: Dict[str, float] = {}
         self._debounce_seconds = 1.0
@@ -133,6 +134,7 @@ class RealmWatcher(FileSystemEventHandler):
         await self.event_stream.emit(
             EventType.METRICS_UPDATED,
             {
+                "realm": self.realm_name,
                 "file": str(path.relative_to(self.root_path)),
                 "absolute_path": str(path.absolute()),
                 "metrics": {
@@ -152,6 +154,7 @@ class RealmWatcher(FileSystemEventHandler):
                 await self.event_stream.emit(
                     EventType.ANALYSIS_OPPORTUNITY,
                     {
+                        "realm": self.realm_name,
                         "trigger": "High Complexity",
                         "file": str(path.relative_to(self.root_path)),
                         "absolute_path": str(path.absolute()),

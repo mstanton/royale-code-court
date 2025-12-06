@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from collections import defaultdict
 import threading
+from datetime import timedelta
 
 
 @dataclass
@@ -203,8 +204,8 @@ class MetricsCollector:
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
                     event_data["event_id"],
-                    event_data["event_type"],
-                    event_data["agent"],
+                    event_data["event_type"].value if hasattr(event_data["event_type"], "value") else event_data["event_type"],
+                    event_data["agent"].value if hasattr(event_data["agent"], "value") else event_data["agent"],
                     json.dumps(event_data["payload"]),
                     event_data["timestamp"],
                     event_data.get("session_id", ""),
@@ -317,3 +318,111 @@ class MetricsCollector:
         """Clear in-memory metrics"""
         with self._lock:
             self._in_memory_metrics.clear()
+
+    def get_event_volume_history(self, minutes: int = 60, bucket_size_minutes: int = 1) -> List[int]:
+        """
+        Get event volume history bucketed by time.
+        Returns a list of counts, where the last item is the most recent bucket.
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=minutes)
+        min_timestamp = start_time.isoformat()
+        
+        buckets = [0] * (minutes // bucket_size_minutes)
+        
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            try:
+                # Group by time bucket
+                # SQLite strftime('%s', timestamp) returns seconds since epoch
+                # We calculate bucket index based on minutes offset from start_time
+                rows = conn.execute(
+                    """
+                    SELECT timestamp 
+                    FROM events 
+                    WHERE timestamp >= ? 
+                    ORDER BY timestamp ASC
+                    """,
+                    (min_timestamp,)
+                ).fetchall()
+                
+                for row in rows:
+                    try:
+                        ts = datetime.fromisoformat(row[0])
+                        # Calculate minutes since start of window
+                        delta_minutes = (ts - start_time).total_seconds() / 60
+                        bucket_index = int(delta_minutes / bucket_size_minutes)
+                        
+                        if 0 <= bucket_index < len(buckets):
+                            buckets[bucket_index] += 1
+                    except ValueError:
+                        continue
+                        
+            except sqlite3.OperationalError:
+                pass
+                
+        return buckets
+
+    def get_metric_average_history(self, metric_name: str, minutes: int = 60, bucket_size_minutes: int = 5) -> List[float]:
+        """
+        Get average of a specific metric (from METRICS_UPDATED events) over time.
+        metric_name example: 'complexity' or 'loc'
+        """
+        end_time = datetime.now()
+        start_time = end_time - timedelta(minutes=minutes)
+        min_timestamp = start_time.isoformat()
+        
+        num_buckets = minutes // bucket_size_minutes
+        bucket_sums = [0.0] * num_buckets
+        bucket_counts = [0] * num_buckets
+        
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            try:
+                # Filter for METRICS_UPDATED events
+                rows = conn.execute(
+                    """
+                    SELECT timestamp, payload
+                    FROM events 
+                    WHERE event_type = 'metrics_updated' 
+                    AND timestamp >= ? 
+                    ORDER BY timestamp ASC
+                    """,
+                    (min_timestamp,)
+                ).fetchall()
+                
+                for row in rows:
+                    try:
+                        ts = datetime.fromisoformat(row[0])
+                        payload = json.loads(row[1])
+                        
+                        # Extract metric value
+                        metrics = payload.get("metrics", {})
+                        if metric_name not in metrics:
+                            continue
+                            
+                        value = metrics[metric_name]
+                        
+                        # Calculate bucket
+                        delta_minutes = (ts - start_time).total_seconds() / 60
+                        bucket_index = int(delta_minutes / bucket_size_minutes)
+                        
+                        if 0 <= bucket_index < num_buckets:
+                            bucket_sums[bucket_index] += value
+                            bucket_counts[bucket_index] += 1
+                            
+                    except (ValueError, json.JSONDecodeError):
+                        continue
+                        
+            except sqlite3.OperationalError:
+                pass
+        
+        # Calculate averages
+        averages = []
+        for i in range(num_buckets):
+            if bucket_counts[i] > 0:
+                averages.append(bucket_sums[i] / bucket_counts[i])
+            else:
+                # If no data for bucket, use previous value or 0
+                prev = averages[-1] if averages else 0.0
+                averages.append(prev)
+                
+        return averages

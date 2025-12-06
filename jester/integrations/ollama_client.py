@@ -218,10 +218,13 @@ CODE_GENERATION_SYSTEM_PROMPT = """You are an expert programmer. Generate clean,
 
 Guidelines:
 - Write clear, readable code
-- Include brief comments for complex logic
+- Include informative comments for complex logic
 - Use type hints where appropriate
-- Follow best practices for the language
+- Follow best practices for the language and or frameworks
 - Handle edge cases appropriately
+- Use the version of the language and or frameworks that is specified the project files
+- Use the latest stable version of the language and or frameworks if not specified
+
 
 Always wrap your code in markdown code blocks with the language specified, like:
 ```python
@@ -262,22 +265,24 @@ class KingAgent(BaseAgent):
         prompt: str,
         language: str = "python",
         config: Optional[GenerationConfig] = None,
+        feedback_history: Optional[List[Dict[str, Any]]] = None
     ) -> GenerationResult:
         """
         Generate code from a natural language prompt.
-
-        Args:
-            prompt: The requirement/task description
-            language: Target programming language
-            config: Optional generation config
-
-        Returns:
-            GenerationResult with generated code
         """
         await self.thinking(f"Generating {language} code...")
 
-        # Add language hint to prompt
+        system_prompt = self.system_prompt
         full_prompt = f"Write {language} code to: {prompt}"
+        
+        # Add Loop Context (Momentum)
+        if feedback_history:
+            system_prompt += "\nYou are currently in an OPTIMIZATION LOOP. Learn from your past mistakes."
+            history_str = "\n".join([
+                f"\n--- Attempt {i+1} ---\nCode:\n{att.get('code', '')}\nFeedback: {att.get('feedback', '')}\nMetrics: {att.get('metrics', {})}"
+                for i, att in enumerate(feedback_history)
+            ])
+            full_prompt += f"\n\nPREVIOUS ATTEMPTS AND FEEDBACK:\n{history_str}\n\nTASK: Improved the code based on the feedback above."
 
         config = config or GenerationConfig(model=self.model)
 
@@ -285,7 +290,7 @@ class KingAgent(BaseAgent):
             result = await self.ollama.generate(
                 full_prompt,
                 config=config,
-                system_prompt=self.system_prompt,
+                system_prompt=system_prompt,
             )
 
             # Emit code generated event
@@ -316,14 +321,6 @@ class KingAgent(BaseAgent):
     ) -> str:
         """
         Stream code generation with optional callback.
-
-        Args:
-            prompt: The requirement
-            language: Target language
-            callback: Optional async callback for each token
-
-        Returns:
-            Complete generated code
         """
         await self.thinking(f"Streaming {language} code generation...")
 

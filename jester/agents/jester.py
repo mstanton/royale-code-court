@@ -171,30 +171,23 @@ class JesterAgent(BaseAgent):
         if generate_tests and result.executes and language == "python":
             await self.thinking("Generating tests...")
             tests = self._generate_tests(code)
-            result.tests_generated = len(tests)
+        
+        # Populate feedback for LLM optimization loop
+        feedback = ""
+        if result.execution_result:
+            if not result.execution_result.success:
+                feedback = f"Execution Failed: {result.execution_result.error}"
+            elif result.execution_result.execution_time_ms > 500: # Threshold for optimization
+                feedback = f"Execution successful but SLOW ({result.execution_result.execution_time_ms:.2f}ms). Target < 500ms."
+            else:
+                feedback = "Execution successful and efficient."
 
-            if tests:
-                await self.thinking(f"Running {len(tests)} tests...")
-                passed, failed = await self._run_tests(code, tests)
-                result.tests_passed = passed
-                result.tests_failed = failed
-
-        result.validation_time_ms = (time.time() - start_time) * 1000
-
-        # Record validation metric
-        self.metrics.record_validation(ValidationMetric(
-            code_id=code_id,
-            syntax_valid=result.syntax_valid,
-            executes=result.executes,
-            tests_passed=result.tests_passed,
-            tests_failed=result.tests_failed,
-            patterns_detected=result.patterns_detected,
-            validation_time_ms=result.validation_time_ms,
-        ))
-
-        # Record patterns
-        for pattern_name in result.patterns_detected:
-            self.metrics.record_pattern(pattern_name, result.overall_success)
+            # Update result with execution stats and feedback
+            result.execution_stats = {
+                "time_ms": result.execution_result.execution_time_ms,
+                "memory_mb": result.execution_result.memory_usage_mb
+            }
+            result.feedback = feedback
 
         await self._emit_validation_result(result)
         return result

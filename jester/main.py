@@ -16,16 +16,15 @@ from rich.text import Text
 
 from .core.event_stream import EventBus, EventStream, get_event_bus
 from .core.models import AgentType, EventType
+from .agents.base_agent import BaseAgent
 from .core.metrics import MetricsCollector
 from .agents.jester import JesterAgent
+from .config import JesterConfig
 from .agents.scribe import ScribeAgent
 from .execution.executor import CodeExecutor
 from .integrations.ollama_client import OllamaClient, KingAgent
 from .integrations.claude_code import ClaudeCodeIntegration
-from .agents.scribe import ScribeAgent
-from .execution.executor import CodeExecutor
-from .integrations.ollama_client import OllamaClient, KingAgent
-from .integrations.claude_code import ClaudeCodeIntegration
+from .integrations.open_code import OpenCodeIntegration
 from .observability.terminal_ui import TerminalDashboard, SimpleLogDisplay
 from .observability.watcher import RealmWatcher
 
@@ -54,6 +53,12 @@ class RoyalCourt:
     ):
         # Core event system
         self.event_bus = get_event_bus()
+        
+        # Load config to check preferences
+        self.config = JesterConfig.load()
+        if ollama_model == "gemma3:4b" and self.config.model: # Override default if config present
+             ollama_model = self.config.model
+
         self.metrics = MetricsCollector(
             storage_path=Path("storage/metrics.db")
         )
@@ -81,12 +86,20 @@ class RoyalCourt:
             self.scribe = ScribeAgent(self.event_bus)
 
         # The Warrior (code integrator)
-        self.warrior: Optional[ClaudeCodeIntegration] = None
+        self.warrior: Optional[BaseAgent] = None
         if enable_warrior:
-            self.warrior = ClaudeCodeIntegration(
-                self.event_bus,
-                working_dir=working_dir,
-            )
+            if self.config.warrior_provider == "claude-code":
+                self.warrior = ClaudeCodeIntegration(
+                    self.event_bus,
+                    working_dir=working_dir,
+                )
+            else:
+                # Default to Open Code (Linear Warrior)
+                self.warrior = OpenCodeIntegration(
+                    self.event_bus,
+                    ollama_agent=self.king,
+                    working_dir=working_dir,
+                )
 
         # Dashboard
         self.dashboard: Optional[TerminalDashboard] = None
@@ -144,7 +157,7 @@ class RoyalCourt:
 
         # Start dashboard or simple log
         if use_dashboard:
-            self.dashboard = TerminalDashboard(self.event_bus)
+            self.dashboard = TerminalDashboard(self.event_bus, metrics_collector=self.metrics)
         else:
             self.simple_log = SimpleLogDisplay(self.event_bus)
 
@@ -309,6 +322,92 @@ def generate(
             if validate_code:
                 console.print()
                 console.print(court.jester.format_report(result["validation"]))
+
+        finally:
+            await court.stop()
+
+    asyncio.run(run())
+
+
+@app.command()
+def optimize(
+    prompt: str = typer.Argument(..., help="What to generate and optimize"),
+    language: str = typer.Option("python", "--lang", "-l", help="Programming language"),
+    model: str = typer.Option("gemma3:4b", "--model", "-m", help="Ollama model"),
+    max_attempts: int = typer.Option(5, "--attempts", "-n", help="Max optimization attempts"),
+    threshold_ms: float = typer.Option(500.0, "--threshold", "-t", help="Performance threshold (ms)"),
+):
+    """Iteratively generate and optimize code for performance"""
+
+    async def run():
+        court = RoyalCourt(ollama_model=model)
+        await court.start(use_dashboard=False)
+
+        try:
+            if not await court.king.is_available():
+                console.print("[red]Error:[/red] Ollama is not running.")
+                raise typer.Exit(1)
+
+            console.print(Panel(
+                f"Task: {prompt}\nTarget: < {threshold_ms}ms execution time",
+                title="🚀 Code Optimization Loop",
+                border_style="green"
+            ))
+
+            feedback_history = []
+            best_code = None
+            best_time = float('inf')
+
+            for i in range(max_attempts):
+                console.print(f"\n[bold cyan]Attempt {i+1}/{max_attempts}[/bold cyan]")
+                
+                # Generate
+                if i == 0:
+                     # First attempt
+                     result = await court.king.generate_code(prompt, language)
+                else:
+                     # Optimization attempt
+                     console.print("  🔄 Optimizing based on feedback...")
+                     result = await court.king.generate_code(prompt, language, feedback_history=feedback_history)
+
+                console.print(f"  ✨ Generated {len(result.code)} chars")
+
+                # Validate
+                validation = await court.jester.validate(result.code, language)
+                console.print(court.jester.format_report(validation))
+
+                time_ms = validation.execution_stats.get("time_ms", 0)
+                
+                # Check success
+                if validation.overall_success:
+                    if time_ms < best_time:
+                         best_time = time_ms
+                         best_code = result.code
+                    
+                    if time_ms <= threshold_ms:
+                        console.print(f"\n[bold green]✅ Success! Optimized code runs in {time_ms:.2f}ms[/bold green]")
+                        console.print(Panel(result.code, title="🏆 Optimized Code", border_style="green"))
+                        break
+                    else:
+                        console.print(f"  ⚠️  Too slow ({time_ms:.2f}ms > {threshold_ms}ms). Retrying...")
+                        feedback_history.append({
+                            "code": result.code,
+                            "feedback": validation.feedback,
+                            "metrics": validation.execution_stats
+                        })
+                else:
+                    console.print("  ❌ Validation failed. Retrying with error feedback...")
+                    feedback_history.append({
+                        "code": result.code,
+                        "feedback": validation.feedback,
+                        "metrics": validation.execution_stats
+                    })
+
+            else:
+                console.print(f"\n[bold yellow]⚠️  Max attempts reached without hitting threshold.[/bold yellow]")
+                if best_code:
+                     console.print(f"Best run: {best_time:.2f}ms")
+                     console.print(Panel(best_code, title="Best Attempt", border_style="yellow"))
 
         finally:
             await court.stop()
@@ -507,25 +606,52 @@ def repl():
 
 @app.command()
 def watch(
-    path: Path = typer.Argument(".", help="Path to watch"),
-    model: str = typer.Option("gemma3:4b", "--model", "-m", help="Ollama model"),
+    path: Path = typer.Argument(None, help="Path to watch (overrides config)"),
+    config: Path = typer.Option(None, "--config", "-c", help="Path to jester.toml"),
+    model: str = typer.Option(None, "--model", "-m", help="Ollama model (overrides config)"),
 ):
-    """Start the Passive Observer (Realm Watcher)"""
+    """Start the Passive Observer (Multi-Realm Watcher)"""
     
-    if not path.exists():
-        console.print(f"[red]Error:[/red] Path not found: {path}")
-        raise typer.Exit(1)
+    # Load configuration
+    jester_config = JesterConfig.load(config)
+    
+    # Overrides
+    target_model = model or jester_config.model
+    
+    # Determine realms to watch
+    realms_to_watch = []
+    
+    if path:
+        # CLI path overrides everything - watch single realm
+        if not path.exists():
+            console.print(f"[red]Error:[/red] Path not found: {path}")
+            raise typer.Exit(1)
+        realms_to_watch.append(("Current", path))
+    elif jester_config.realms:
+        # Use config realms
+        for r in jester_config.realms:
+            realms_to_watch.append((r.name, r.path))
+    else:
+        # Default to current dir
+        realms_to_watch.append(("Current", Path(".")))
 
     async def run():
-        court = RoyalCourt(ollama_model=model, enable_scribe=True)
+        court = RoyalCourt(ollama_model=target_model, enable_scribe=True)
         # Enable persisted events so dashboard can see watcher events
         await court.start(use_dashboard=True)
         
-        # Start Watcher
-        watcher = RealmWatcher(court.human_stream, str(path))
-        watcher.start()
+        watchers = []
+        console.print(Panel(f"Starting {len(realms_to_watch)} Realm Watchers...", style="green"))
         
-        console.print(f"[green]Started watching realm: {path}[/green]")
+        for name, r_path in realms_to_watch:
+            if not r_path.exists():
+                console.print(f"[yellow]Warning:[/yellow] Realm path not found: {r_path}")
+                continue
+                
+            watcher = RealmWatcher(court.human_stream, str(r_path), realm_name=name)
+            watcher.start()
+            watchers.append(watcher)
+            console.print(f"  👁️  Watching realm: [bold]{name}[/bold] ({r_path})")
 
         try:
             # We run dashboard polling here too, so the dashboard updates
@@ -539,7 +665,10 @@ def watch(
         finally:
             if polling_task:
                 polling_task.cancel()
-            watcher.stop()
+            
+            for w in watchers:
+                w.stop()
+                
             await court.stop()
 
     asyncio.run(run())

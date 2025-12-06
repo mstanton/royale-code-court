@@ -26,6 +26,7 @@ from rich import box
 
 from ..core.models import AgentType, Event, EventType
 from ..core.event_stream import EventBus
+from ..core.metrics import MetricsCollector
 
 
 # Agent emojis and colors
@@ -48,10 +49,12 @@ class TerminalDashboard:
     def __init__(
         self,
         event_bus: EventBus,
+        metrics_collector: Optional[MetricsCollector] = None,
         max_events: int = 50,
         max_logs: int = 20,
     ):
         self.event_bus = event_bus
+        self.metrics_collector = metrics_collector
         self.console = Console()
         self.max_events = max_events
         self.max_logs = max_logs
@@ -373,9 +376,49 @@ class TerminalDashboard:
             )
 
         return Panel(
-            table,
             title=f"🔍 Opportunities ({len(self.opportunities)}) [Press 'a' to approve]",
             border_style="yellow",
+            box=box.ROUNDED,
+        )
+
+    def _create_rhythm_panel(self) -> Panel:
+        """Create rhythmic patterns panel (Sparklines)"""
+        if not self.metrics_collector:
+            return Panel(Text("Metrics not available", style="dim"), title="📈 Rhythm")
+
+        # 1. Event Activity (Last 60 mins)
+        activity_data = self.metrics_collector.get_event_volume_history(minutes=60, bucket_size_minutes=2)
+        # Normalize for display (simple bar characters)
+        max_val = max(activity_data) if activity_data else 1
+        bars = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+        
+        activity_str = ""
+        for val in activity_data:
+             idx = min(len(bars) - 1, int((val / max_val) * (len(bars) - 1))) if max_val > 0 else 0
+             activity_str += bars[idx]
+
+        # 2. Complexity Trend
+        complexity_data = self.metrics_collector.get_metric_average_history("complexity", minutes=60, bucket_size_minutes=5)
+        # Sparkline for complexity
+        comp_str = ""
+        max_comp = max(complexity_data) if complexity_data else 1
+        for val in complexity_data:
+             idx = min(len(bars) - 1, int((val / max_comp) * (len(bars) - 1))) if max_comp > 0 else 0
+             comp_str += bars[idx]
+
+        grid = Table.grid(expand=True)
+        grid.add_column(ratio=1)
+        grid.add_column(ratio=1)
+        
+        grid.add_row(
+            Panel(Text(activity_str, style="green"), title="Activity (1h)", box=None),
+            Panel(Text(comp_str, style="red"), title="Complexity (1h)", box=None)
+        )
+
+        return Panel(
+            grid,
+            title="📈 Code Rhythm",
+            border_style="blue",
             box=box.ROUNDED,
         )
 
@@ -401,6 +444,7 @@ class TerminalDashboard:
 
         layout["right"].split_column(
             Layout(name="validation", ratio=3),
+            Layout(name="rhythm", ratio=2),
             Layout(name="opportunities", ratio=2),
             Layout(name="agents", ratio=2),
         )
@@ -415,6 +459,7 @@ class TerminalDashboard:
         layout["events"].update(self._create_event_stream())
         layout["code"].update(self._create_code_panel())
         layout["validation"].update(self._create_validation_panel())
+        layout["rhythm"].update(self._create_rhythm_panel())
         layout["opportunities"].update(self._create_opportunities_panel())
         layout["agents"].update(self._create_agent_status())
         layout["footer"].update(self._create_logs_panel())
