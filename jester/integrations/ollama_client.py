@@ -19,7 +19,7 @@ from ..agents.base_agent import BaseAgent
 @dataclass
 class GenerationConfig:
     """Configuration for code generation"""
-    model: str = "qwen2.5-coder:7b"
+    model: str = "gemma3:4b"
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9
@@ -240,7 +240,7 @@ class KingAgent(BaseAgent):
         self,
         event_bus: EventBus,
         ollama_client: Optional[OllamaClient] = None,
-        model: str = "qwen2.5-coder:7b",
+        model: str = "gemma3:4b",
     ):
         super().__init__(AgentType.KING, event_bus)
         self.ollama = ollama_client or OllamaClient(default_model=model)
