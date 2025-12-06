@@ -40,7 +40,7 @@ class RoyalCourt:
 
     def __init__(
         self,
-        ollama_model: str = "qwen2.5-coder:7b",
+        ollama_model: str = "gemma3:4b",
         ollama_url: str = "http://localhost:11434",
         enable_scribe: bool = True,
         enable_warrior: bool = False,
@@ -257,7 +257,7 @@ def validate(
 def generate(
     prompt: str = typer.Argument(..., help="What to generate"),
     language: str = typer.Option("python", "--lang", "-l", help="Programming language"),
-    model: str = typer.Option("qwen2.5-coder:7b", "--model", "-m", help="Ollama model"),
+    model: str = typer.Option("gemma3:4b", "--model", "-m", help="Ollama model"),
     validate_code: bool = typer.Option(True, "--validate/--no-validate", help="Validate after generation"),
 ):
     """Generate code using the King (Ollama) and validate with the Jester"""
@@ -293,7 +293,7 @@ def generate(
 
 @app.command()
 def dashboard(
-    model: str = typer.Option("qwen2.5-coder:7b", "--model", "-m", help="Ollama model"),
+    model: str = typer.Option("gemma3:4b", "--model", "-m", help="Ollama model"),
     scribe: bool = typer.Option(True, "--scribe/--no-scribe", help="Enable Scribe agent"),
 ):
     """Run the interactive dashboard"""

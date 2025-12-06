@@ -54,7 +54,7 @@ For code generation features:
 ollama serve
 
 # Pull a coding model
-ollama pull qwen2.5-coder:7b
+ollama pull gemma3:4b
 ```
 
 ## Quick Start
@@ -137,7 +137,7 @@ asyncio.run(validate_code())
 | Command | Description | Example |
 |---------|-------------|---------|
 | `validate` | Validate code syntax and execution | `jester validate "code" --lang python` |
-| `generate` | Generate code with LLM and validate | `jester generate "prompt" --model qwen2.5-coder:7b` |
+| `generate` | Generate code with LLM and validate | `jester generate "prompt" --model gemma3:4b` |
 | `repl` | Interactive validation REPL | `jester repl` |
 | `dashboard` | Real-time event stream UI | `jester dashboard` |
 | `demo` | Run demonstration | `jester demo` |
@@ -154,7 +154,7 @@ asyncio.run(validate_code())
 
 ```python
 court = RoyalCourt(
-    ollama_model="qwen2.5-coder:7b",  # LLM model
+    ollama_model="gemma3:4b",  # LLM model
     ollama_url="http://localhost:11434",  # Ollama URL
     enable_scribe=True,  # Knowledge keeper
     enable_warrior=False,  # Claude Code integration
@@ -168,7 +168,7 @@ Create a `.env` file in the project root:
 
 ```bash
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5-coder:7b
+OLLAMA_MODEL=gemma3:4b
 ENABLE_SCRIBE=true
 ```
 

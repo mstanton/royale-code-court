@@ -1096,7 +1096,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Start Ollama (King)
-ollama pull qwen2.5-coder:7b
+ollama pull gemma3:4b
 ollama serve
 
 # Run demo dashboard
@@ -1105,7 +1105,7 @@ python examples/demo_dashboard.py
 # Run full system
 python -m jester.main \
   --king ollama \
-  --model qwen2.5-coder:7b \
+  --model gemma3:4b \
   --scribe-enabled \
   --dashboard terminal
 

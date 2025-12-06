@@ -49,7 +49,7 @@ class OllamaClient:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        default_model: str = "qwen2.5-coder:7b",
+        default_model: str = "gemma3:4b",
     ):
         self.base_url = base_url
         self.default_model = default_model
