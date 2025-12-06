@@ -9,6 +9,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 import re
+import subprocess
+import tempfile
+import os
 
 from ..core.models import (
     AgentType,
@@ -134,30 +137,32 @@ class JesterAgent(BaseAgent):
 
         await self.thinking("Syntax valid. Checking for patterns...")
 
-        # Stage 2: Pattern detection
-        patterns = self._detect_patterns(code)
-        result.patterns_detected = [p.name for p in patterns]
-
-        # Stage 3: Security analysis
-        security_issues = self._check_security(code)
-        for issue_name, severity, description in security_issues:
-            if severity in [SeverityLevel.CRITICAL, SeverityLevel.HIGH]:
-                result.issues.append(f"🚨 {severity.value.upper()}: {description}")
-            else:
-                result.suggestions.append(f"⚠️ {description}")
-
-        # Stage 4: Complexity analysis
-        result.complexity_score = self._calculate_complexity(code)
-        if result.complexity_score > 15:
-            result.suggestions.append(
-                f"High complexity score ({result.complexity_score}). Consider breaking into smaller functions."
-            )
+        if language == "python":
+            # Stage 2: Pattern detection
+            patterns = self._detect_patterns(code)
+            result.patterns_detected = [p.name for p in patterns]
+        
+            # Stage 3: Security analysis
+            security_issues = self._check_security(code)
+            for issue_name, severity, description in security_issues:
+                if severity in [SeverityLevel.CRITICAL, SeverityLevel.HIGH]:
+                    result.issues.append(f"🚨 {severity.value.upper()}: {description}")
+                else:
+                    result.suggestions.append(f"⚠️ {description}")
+        
+            # Stage 4: Complexity analysis
+            result.complexity_score = self._calculate_complexity(code)
+            if result.complexity_score > 15:
+                result.suggestions.append(
+                    f"High complexity score ({result.complexity_score}). Consider breaking into smaller functions."
+                )
 
         # Stage 5: Execution
         await self.thinking("Executing code...")
         
-        # Use Guard Tracing if supported by tier (REPL only for now)
-        exec_result = await self.executor.execute(code, language, guard_callback=self.guard.handle_trace)
+        # Use Guard Tracing if supported by tier (REPL only for now) AND language is Python
+        guard_cb = self.guard.handle_trace if language == "python" else None
+        exec_result = await self.executor.execute(code, language, guard_callback=guard_cb)
         result.executes = exec_result.success
         result.execution_result = exec_result
 
@@ -209,7 +214,63 @@ class JesterAgent(BaseAgent):
             except SyntaxError as e:
                 return False, f"Syntax error at line {e.lineno}: {e.msg}"
         # For other languages, assume valid (container will catch errors)
+        # return True, ""
+        elif language == "bash" or language == "sh":
+            return self._check_bash_syntax(code)
+        elif language == "javascript" or language == "js":
+            return self._check_node_syntax(code)
+        
         return True, ""
+
+    def _check_bash_syntax(self, code: str) -> Tuple[bool, str]:
+        """Check Bash syntax using bash -n"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False, newline='\n') as f:
+            f.write(code)
+            temp_path = f.name
+            
+        try:
+            # bash -n checks syntax without executing
+            result = subprocess.run(
+                ["bash", "-n", temp_path], 
+                capture_output=True, 
+                text=True
+            )
+            if result.returncode == 0:
+                return True, ""
+            else:
+                return False, f"Bash Syntax Error: {result.stderr.strip()}"
+        except FileNotFoundError:
+            return True, "Bash not found, skipping syntax check"
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+    def _check_node_syntax(self, code: str) -> Tuple[bool, str]:
+        """Check JS syntax using node --check"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+            f.write(code)
+            temp_path = f.name
+            
+        try:
+            # node --check checks syntax
+            result = subprocess.run(
+                ["node", "--check", temp_path], 
+                capture_output=True, 
+                text=True
+            )
+            if result.returncode == 0:
+                return True, ""
+            else:
+                return False, f"Node Syntax Error: {result.stderr.strip()}"
+        except FileNotFoundError:
+            return True, "Node not found, skipping syntax check"
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 
     def _detect_patterns(self, code: str) -> List[CodePattern]:
         """Detect code patterns"""

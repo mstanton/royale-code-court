@@ -13,6 +13,8 @@ from ..core.models import ExecutionResult, ExecutionTier, CodeSubmission
 from ..core.event_stream import EventStream
 from .repl_executor import REPLExecutor
 from .container_executor import ContainerExecutor
+from .bash_executor import BashExecutor
+from .node_executor import NodeExecutor
 try:
     from .tracer import ExecutionTracer
 except ImportError:
@@ -84,6 +86,8 @@ class CodeExecutor:
         self.event_stream = event_stream
         self.repl_executor = REPLExecutor()
         self.container_executor = ContainerExecutor()
+        self.bash_executor = BashExecutor()
+        self.node_executor = NodeExecutor()
 
         # Configuration
         self.max_execution_time = 5.0  # seconds
@@ -205,8 +209,14 @@ class CodeExecutor:
         if self.event_stream:
             await self.event_stream.execution_start(code[:50] + "...", tier.value)
 
-        # Execute based on tier
-        if tier == ExecutionTier.REPL:
+        # Execute based on tier/language
+        if language == "bash" or language == "sh":
+            result = await self.bash_executor.execute(code, timeout)
+            result.tier = ExecutionTier.REPL # Bash is "local"
+        elif language == "javascript" or language == "js":
+            result = await self.node_executor.execute(code, timeout)
+            result.tier = ExecutionTier.REPL # Node is "local"
+        elif tier == ExecutionTier.REPL:
             result = await self._execute_repl(code, timeout, guard_callback)
         else:
             if guard_callback:
