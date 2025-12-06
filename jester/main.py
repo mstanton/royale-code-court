@@ -6,6 +6,7 @@ The Royal Court orchestrator and CLI
 import asyncio
 import sys
 from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
 import typer
@@ -43,8 +44,8 @@ class RoyalCourt:
         ollama_model: str = "gemma3:4b",
         ollama_url: str = "http://localhost:11434",
         enable_scribe: bool = True,
-        enable_warrior: bool = False,
-        working_dir: Optional[str] = None,
+        enable_warrior: bool = True,
+        working_dir: Optional[str] = "./working_dir",
     ):
         # Core event system
         self.event_bus = get_event_bus()
@@ -85,6 +86,25 @@ class RoyalCourt:
         # Dashboard
         self.dashboard: Optional[TerminalDashboard] = None
         self.simple_log: Optional[SimpleLogDisplay] = None
+
+        # Subscribe event persister
+        self.event_bus.subscribe_all(self._persist_event)
+
+    async def _persist_event(self, event) -> None:
+        """Persist event to SQLite for cross-process visibility"""
+        # Skip if already from persistence to avoid loops
+        if hasattr(event, "from_persistence") and event.from_persistence:
+            return
+
+        # Skip high-volume internal events that don't need history
+        if event.event_type in [EventType.EXECUTION_OUTPUT]:
+            return
+
+        try:
+            self.metrics.record_event(event.to_dict())
+        except Exception as e:
+            # Don't let logging failures crash the app
+            pass
 
     async def start(self, use_dashboard: bool = True) -> None:
         """Start all agents"""
@@ -303,11 +323,60 @@ def dashboard(
         await court.start(use_dashboard=True)
 
         try:
+            # Start dashboard polling in background
+            polling_task = asyncio.create_task(_poll_events(court))
             await court.interactive_session()
         except KeyboardInterrupt:
             pass
         finally:
+            if polling_task:
+                polling_task.cancel()
             await court.stop()
+
+    async def _poll_events(court: RoyalCourt):
+        """Poll for new events from other processes"""
+        last_id = 0
+        from .core.models import Event, EventType, AgentType
+
+        while True:
+            try:
+                # Get new events
+                new_events = court.metrics.get_new_events(last_id)
+                for event_data in new_events:
+                    last_id = max(last_id, event_data["id"])
+                    
+                    # Convert string timestamp back to datetime object
+                    timestamp_str = event_data["timestamp"]
+                    # Handle both with and without milliseconds for robustness
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp_str)
+                    except ValueError:
+                         # Fallback if isoformat fails
+                         timestamp = datetime.now()
+
+                    # Reconstruct event
+                    event = Event(
+                        event_type=EventType(event_data["event_type"]),
+                        agent=AgentType(event_data["agent"]),
+                        payload=event_data["payload"],
+                        event_id=event_data["event_id"],
+                        timestamp=timestamp,
+                        session_id=event_data["session_id"]
+                    )
+                    
+                    # Mark as from persistence to avoid infinite loop
+                    event.from_persistence = True
+                    
+                    # Emit to local bus (skip local handlers to avoid double processing if needed)
+                    # But here we WANT local handlers (Dashboard) to see it.
+                    # The recursion check in _persist_event prevents writing it back.
+                    await court.event_bus.emit(event)
+
+            except Exception as e:
+                # console.print(f"[dim]Polling error: {e}[/dim]")
+                pass
+            
+            await asyncio.sleep(0.5)
 
     asyncio.run(run())
 

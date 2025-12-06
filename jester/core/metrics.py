@@ -90,6 +90,17 @@ class MetricsCollector:
                     last_seen TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    agent TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    session_id TEXT
+                )
+            """)
             conn.commit()
 
     def record_execution(self, metric: ExecutionMetric) -> None:
@@ -183,10 +194,62 @@ class MetricsCollector:
                 )
             conn.commit()
 
+    def record_event(self, event_data: Dict[str, Any]) -> None:
+        """Record a raw event"""
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            conn.execute(
+                """INSERT INTO events
+                   (event_id, event_type, agent, payload, timestamp, session_id)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    event_data["event_id"],
+                    event_data["event_type"],
+                    event_data["agent"],
+                    json.dumps(event_data["payload"]),
+                    event_data["timestamp"],
+                    event_data.get("session_id", ""),
+                ),
+            )
+            conn.commit()
+
+    def get_new_events(self, last_id: int = 0) -> List[Dict[str, Any]]:
+        """Get events since a specific ID (for polling)"""
+        events = []
+        with sqlite3.connect(str(self.storage_path)) as conn:
+            for row in conn.execute(
+                """SELECT id, event_id, event_type, agent, payload, timestamp, session_id
+                   FROM events WHERE id > ? ORDER BY id ASC""",
+                (last_id,),
+            ).fetchall():
+                try:
+                    payload = json.loads(row[4])
+                except json.JSONDecodeError:
+                    payload = {}
+                
+                events.append({
+                    "id": row[0],
+                    "event_id": row[1],
+                    "event_type": row[2],
+                    "agent": row[3],
+                    "payload": payload,
+                    "timestamp": row[5],
+                    "session_id": row[6],
+                })
+        return events
+
     def get_execution_stats(self) -> Dict[str, Any]:
         """Get overall execution statistics"""
         with sqlite3.connect(str(self.storage_path)) as conn:
-            total = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
+            try:
+                total = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
+            except sqlite3.OperationalError:
+                 return {
+                    "total_executions": 0,
+                    "success_rate": 0.0,
+                    "avg_execution_time_ms": 0.0,
+                    "by_tier": {},
+                }
+            
             if total == 0:
                 return {
                     "total_executions": 0,
@@ -225,19 +288,22 @@ class MetricsCollector:
     def get_pattern_stats(self) -> List[Dict[str, Any]]:
         """Get pattern statistics"""
         with sqlite3.connect(str(self.storage_path)) as conn:
-            patterns = []
-            for row in conn.execute(
-                """SELECT pattern_name, occurrences, success_count, failure_count, last_seen
-                   FROM patterns ORDER BY occurrences DESC"""
-            ).fetchall():
-                total = row[2] + row[3]
-                patterns.append({
-                    "name": row[0],
-                    "occurrences": row[1],
-                    "success_rate": row[2] / total if total > 0 else 0.0,
-                    "last_seen": row[4],
-                })
-            return patterns
+            try:
+                patterns = []
+                for row in conn.execute(
+                    """SELECT pattern_name, occurrences, success_count, failure_count, last_seen
+                       FROM patterns ORDER BY occurrences DESC"""
+                ).fetchall():
+                    total = row[2] + row[3]
+                    patterns.append({
+                        "name": row[0],
+                        "occurrences": row[1],
+                        "success_rate": row[2] / total if total > 0 else 0.0,
+                        "last_seen": row[4],
+                    })
+                return patterns
+            except sqlite3.OperationalError:
+                return []
 
     def get_recent_metrics(self, limit: int = 10) -> Dict[str, List[Dict]]:
         """Get recent metrics for display"""
