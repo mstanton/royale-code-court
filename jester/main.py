@@ -19,6 +19,8 @@ from .core.models import AgentType, EventType
 from .agents.base_agent import BaseAgent
 from .core.metrics import MetricsCollector
 from .agents.jester import JesterAgent
+from .core.scratchpad import ScratchPad
+from .analysis.trend_analyzer import TrendAnalyzer
 from .config import JesterConfig
 from .agents.scribe import ScribeAgent
 from .execution.executor import CodeExecutor
@@ -62,6 +64,8 @@ class RoyalCourt:
         self.metrics = MetricsCollector(
             storage_path=Path("storage/metrics.db")
         )
+        self.scratchpad = ScratchPad(storage_path=Path("storage/metrics.db"))
+        self.trend_analyzer = TrendAnalyzer(storage_path=Path("storage/metrics.db"))
 
         # Create human event stream for user input
         self.human_stream = EventStream(self.event_bus, AgentType.HUMAN)
@@ -670,6 +674,106 @@ def watch(
                 w.stop()
                 
             await court.stop()
+
+    asyncio.run(run())
+
+
+@app.command()
+def lab():
+    """Enter the Laboratory (Interactive Scratchpad)"""
+    
+    async def run():
+        court = RoyalCourt(enable_scribe=False)
+        await court.start(use_dashboard=False)
+        
+        console.print(Panel(
+            "[bold]Welcome to The Laboratory[/bold]\n"
+            "Commands:\n"
+            "  save <name> <code>   : Save code snippet\n"
+            "  run <name>           : Execute snippet\n"
+            "  list                 : List snippets\n"
+            "  trend                : Show performance trends\n"
+            "  exit                 : Leave the lab",
+            title="🧪 Jester Lab",
+            border_style="cyan"
+        ))
+
+        while True:
+            try:
+                console.print("\n[cyan]🧪 lab>[/cyan] ", end="")
+                cmd_line = input().strip()
+                if not cmd_line:
+                    continue
+                
+                parts = cmd_line.split(maxsplit=1)
+                cmd = parts[0].lower()
+                args = parts[1] if len(parts) > 1 else ""
+
+                if cmd == "exit":
+                    break
+                
+                elif cmd == "list":
+                    snippets = court.scratchpad.list_snippets()
+                    if not snippets:
+                        console.print("No snippets found.")
+                    else:
+                        for s in snippets:
+                            console.print(f"• [bold]{s['name']}[/bold] ({s['language']}) - Runs: {s['run_count']}")
+                            
+                elif cmd == "save":
+                    if not args:
+                        console.print("[red]Usage: save <name>[/red]")
+                        continue
+                    
+                    name = args
+                    console.print(f"Enter code for '{name}' (end with empty line):")
+                    lines = []
+                    while True:
+                        line = input()
+                        if line == "":
+                            break
+                        lines.append(line)
+                    code = "\n".join(lines)
+                    
+                    court.scratchpad.save_snippet(name, code)
+                    console.print(f"✅ Saved '{name}'")
+
+                elif cmd == "run":
+                    if not args:
+                        console.print("[red]Usage: run <name>[/red]")
+                        continue
+                        
+                    name = args
+                    snippet = court.scratchpad.get_snippet(name)
+                    if not snippet:
+                        console.print(f"[red]Snippet '{name}' not found[/red]")
+                        continue
+                        
+                    console.print(f"[dim]Running '{name}'...[/dim]")
+                    result = await court.executor.execute(snippet.code, language=snippet.language)
+                    
+                    # Record result in scratchpad
+                    court.scratchpad.record_run(name, result.output or result.error)
+                    
+                    if result.success:
+                        console.print(Panel(result.output, title=f"Output ({result.execution_time_ms:.2f}ms)", border_style="green"))
+                    else:
+                        console.print(Panel(result.error, title="Error", border_style="red"))
+
+                elif cmd == "trend":
+                     # Show recent trend
+                     trend = court.trend_analyzer.get_recent_performance_trend()
+                     console.print(Panel(str(trend), title="Recent Performance Trend", border_style="magenta"))
+
+                else:
+                    console.print(f"[red]Unknown command: {cmd}[/red]")
+
+            except KeyboardInterrupt:
+                break
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+        
+        await court.stop()
 
     asyncio.run(run())
 

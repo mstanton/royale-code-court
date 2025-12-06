@@ -4,13 +4,11 @@ For code that requires file I/O, network, or complex dependencies
 """
 
 import asyncio
-import json
-import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Set
 
 from ..core.models import ExecutionResult, ExecutionTier
 
@@ -33,6 +31,7 @@ class ContainerExecutor:
             "javascript": "node:20-slim",
             "bash": "bash:5.2",
         }
+        self.pulled_images: Set[str] = set()
 
     def _detect_runtime(self) -> Optional[str]:
         """Detect available container runtime"""
@@ -46,6 +45,9 @@ class ContainerExecutor:
         code: str,
         language: str = "python",
         timeout: Optional[float] = None,
+        memory_mb: int = 512,
+        cpu_count: float = 1.0,
+        install_commands: Optional[List[str]] = None,
     ) -> ExecutionResult:
         """
         Execute code in a container.
@@ -54,19 +56,25 @@ class ContainerExecutor:
             code: Code to execute
             language: Programming language
             timeout: Maximum execution time
+            memory_mb: Max memory in MB
+            cpu_count: Max CPUs
+            install_commands: List of commands to run before execution (e.g. ['pip install numpy'])
 
         Returns:
             ExecutionResult with output and metrics
         """
         timeout = timeout or self.default_timeout
         start_time = time.time()
+        install_commands = install_commands or []
 
         if not self.runtime:
             # Fall back to subprocess execution
             return await self._execute_subprocess(code, language, timeout)
 
         try:
-            return await self._execute_container(code, language, timeout)
+            # Ensure image exists
+            await self._ensure_image(language)
+            return await self._execute_container(code, language, timeout, memory_mb, cpu_count, install_commands)
         except Exception as e:
             return ExecutionResult(
                 success=False,
@@ -80,6 +88,9 @@ class ContainerExecutor:
         code: str,
         language: str,
         timeout: float,
+        memory_mb: int,
+        cpu_count: float,
+        install_commands: List[str],
     ) -> ExecutionResult:
         """Execute using container runtime"""
         start_time = time.time()
@@ -107,14 +118,33 @@ class ContainerExecutor:
 
             # Build container command
             image = self.images.get(language, self.images["python"])
+            
+            # Handle install_commands by wrapping in shell
+            if install_commands:
+                # We need to chain commands: install -> run code
+                # Join install commands
+                setup_cmd = " && ".join(install_commands)
+                # The original command is a list, e.g. ["python", "/code/code.py"]
+                # We need to turn it into a string
+                run_cmd = " ".join(cmd_in_container)
+                
+                # New entrypoint is shell
+                full_command = f"{setup_cmd} && {run_cmd}"
+                cmd_in_container = ["/bin/sh", "-c", full_command]
+                
+                # If dependencies are needed, assume bridge network (for now)
+                network_mode = "bridge" 
+            else:
+                network_mode = "none"
+
             cmd = [
                 self.runtime, "run",
                 "--rm",
-                "--network=none",  # No network access
-                f"--memory={self.max_memory}",
-                f"--cpus={self.max_cpu}",
-                "--read-only",
-                "-v", f"{tmpdir}:/code:ro",
+                f"--network={network_mode}",
+                f"--memory={memory_mb}m",
+                f"--cpus={cpu_count}",
+                # Read-only disabled to allow pip installs
+                "-v", f"{tmpdir}:/code:rw",
                 image,
             ] + cmd_in_container
 
@@ -230,6 +260,38 @@ class ContainerExecutor:
                     execution_time_ms=(time.time() - start_time) * 1000,
                     tier=ExecutionTier.CONTAINER,
                 )
+
+    async def _ensure_image(self, language: str) -> None:
+        """Ensure the docker image for the language is available"""
+        image = self.images.get(language)
+        if not image or image in self.pulled_images:
+            return
+
+        # Check if image exists locally
+        proc = await asyncio.create_subprocess_exec(
+            self.runtime, "image", "inspect", image,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+        await proc.wait()
+        
+        if proc.returncode == 0:
+            self.pulled_images.add(image)
+            return
+
+        # Pull image
+        print(f"🐳 Pulling image {image} for {language}...")
+        proc = await asyncio.create_subprocess_exec(
+            self.runtime, "pull", image,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        _, stderr = await proc.communicate()
+        
+        if proc.returncode != 0:
+            raise RuntimeError(f"Failed to pull image {image}: {stderr.decode()}")
+        
+        self.pulled_images.add(image)
 
     def is_container_available(self) -> bool:
         """Check if container runtime is available"""

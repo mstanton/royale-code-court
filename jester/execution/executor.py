@@ -20,7 +20,7 @@ try:
 except ImportError:
     ExecutionTracer = None
 # Also need Callable
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, List
 
 
 # Dangerous patterns that require container execution
@@ -162,6 +162,8 @@ class CodeExecutor:
         force_tier: Optional[ExecutionTier] = None,
         timeout: Optional[float] = None,
         guard_callback: Optional[Callable[[Dict], None]] = None,
+        memory_mb: int = 512,
+        install_commands: Optional[List[str]] = None,
     ) -> ExecutionResult:
         """
         Execute code using the appropriate tier.
@@ -222,7 +224,10 @@ class CodeExecutor:
             if guard_callback:
                 # TODO: Implement tracing for container execution if possible
                 pass
-            result = await self._execute_container(code, language, timeout)
+            if guard_callback:
+                # TODO: Implement tracing for container execution if possible
+                pass
+            result = await self._execute_container(code, language, timeout, memory_mb, install_commands)
 
         # Set execution time
         result.execution_time_ms = (time.time() - start_time) * 1000
@@ -250,10 +255,12 @@ class CodeExecutor:
         return await self.repl_executor.execute(code, timeout, guard_callback)
 
     async def _execute_container(
-        self, code: str, language: str, timeout: float
+        self, code: str, language: str, timeout: float, memory_mb: int, install_commands: Optional[List[str]]
     ) -> ExecutionResult:
         """Execute using container (Docker/Podman)"""
-        return await self.container_executor.execute(code, language, timeout)
+        return await self.container_executor.execute(
+            code, language, timeout=timeout, memory_mb=memory_mb, install_commands=install_commands
+        )
 
     def execute_sync(
         self,
