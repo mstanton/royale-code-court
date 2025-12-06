@@ -22,7 +22,12 @@ from .agents.scribe import ScribeAgent
 from .execution.executor import CodeExecutor
 from .integrations.ollama_client import OllamaClient, KingAgent
 from .integrations.claude_code import ClaudeCodeIntegration
+from .agents.scribe import ScribeAgent
+from .execution.executor import CodeExecutor
+from .integrations.ollama_client import OllamaClient, KingAgent
+from .integrations.claude_code import ClaudeCodeIntegration
 from .observability.terminal_ui import TerminalDashboard, SimpleLogDisplay
+from .observability.watcher import RealmWatcher
 
 app = typer.Typer(
     name="jester",
@@ -495,6 +500,46 @@ def repl():
             pass
         finally:
             console.print("\n[dim]Goodbye from the Royal Court![/dim]")
+            await court.stop()
+
+    asyncio.run(run())
+
+
+@app.command()
+def watch(
+    path: Path = typer.Argument(".", help="Path to watch"),
+    model: str = typer.Option("gemma3:4b", "--model", "-m", help="Ollama model"),
+):
+    """Start the Passive Observer (Realm Watcher)"""
+    
+    if not path.exists():
+        console.print(f"[red]Error:[/red] Path not found: {path}")
+        raise typer.Exit(1)
+
+    async def run():
+        court = RoyalCourt(ollama_model=model, enable_scribe=True)
+        # Enable persisted events so dashboard can see watcher events
+        await court.start(use_dashboard=True)
+        
+        # Start Watcher
+        watcher = RealmWatcher(court.human_stream, str(path))
+        watcher.start()
+        
+        console.print(f"[green]Started watching realm: {path}[/green]")
+
+        try:
+            # We run dashboard polling here too, so the dashboard updates
+            polling_task = asyncio.create_task(_poll_events(court))
+            
+            # Interactive session (Dashboard)
+            await court.interactive_session()
+            
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if polling_task:
+                polling_task.cancel()
+            watcher.stop()
             await court.stop()
 
     asyncio.run(run())

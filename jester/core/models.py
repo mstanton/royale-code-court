@@ -27,6 +27,12 @@ class EventType(str, Enum):
     CODE_RECEIVED = "code.received"
     CODE_VALIDATED = "code.validated"
     CODE_APPLIED = "code.applied"
+    FILE_CHANGED = "file.changed"
+
+    # Analysis & Metrics
+    METRICS_UPDATED = "metrics.updated"
+    ANALYSIS_OPPORTUNITY = "analysis.opportunity"
+    ANALYSIS_APPROVED = "analysis.approved"
 
     # Execution
     EXECUTION_START = "execution.start"

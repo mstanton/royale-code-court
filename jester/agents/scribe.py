@@ -8,6 +8,7 @@ import ast
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..core.models import (
@@ -133,6 +134,7 @@ class ScribeAgent(BaseAgent):
             EventType.CODE_VALIDATED,
             EventType.EXECUTION_COMPLETE,
             EventType.HUMAN_DECISION,
+            EventType.ANALYSIS_APPROVED,
         ])
 
     async def on_event(self, event: Event) -> None:
@@ -150,6 +152,9 @@ class ScribeAgent(BaseAgent):
 
         elif event.event_type == EventType.HUMAN_DECISION:
             await self._learn_from_decision(event)
+
+        elif event.event_type == EventType.ANALYSIS_APPROVED:
+            await self._perform_deep_dive(event)
 
     async def analyze_code(self, code: str, source_event: Optional[Event] = None) -> Dict[str, Any]:
         """
@@ -338,6 +343,41 @@ class ScribeAgent(BaseAgent):
 
         await self.log(f"Learning from decision: {decision}")
         # In production, update weights/preferences based on decisions
+
+    async def _perform_deep_dive(self, event: Event) -> None:
+        """Perform deep dive analysis on approved file"""
+        payload = event.payload
+        file_path = payload.get("absolute_path") or payload.get("file")
+        
+        if not file_path:
+            await self.log("Error: No file path provided for deep dive", "error")
+            return
+
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                await self.log(f"Error: File not found: {file_path}", "error")
+                return
+
+            await self.thinking(f"Performing deep dive analysis on {path.name}...")
+            code = path.read_text(encoding="utf-8")
+            
+            # Perform full analysis
+            analysis = await self.analyze_code(code)
+            
+            # Emit insights specifically for this deep dive
+            for insight in analysis["insights"]:
+                await self.emit(EventType.ARCHITECTURAL_INSIGHT, {
+                    "file": str(path),
+                    "insight": insight.title,
+                    "description": insight.description,
+                    "suggestion": insight.suggested_action
+                })
+                
+            await self.log(f"Deep dive complete for {path.name}. Found {len(analysis['insights'])} insights.", "success")
+            
+        except Exception as e:
+            await self.log(f"Deep dive failed: {e}", "error")
 
     async def _emit_pattern(self, pattern: CodePattern) -> None:
         """Emit pattern detected event"""

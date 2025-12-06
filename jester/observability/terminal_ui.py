@@ -4,6 +4,11 @@ Shows events, metrics, and agent status in a beautiful terminal UI
 """
 
 import asyncio
+import sys
+# Windows-specific keyboard handling since 'keyboard' lib requires root/admin often
+if sys.platform == "win32":
+    import msvcrt
+from collections import deque
 from collections import deque
 from datetime import datetime
 from typing import Any, Deque, Dict, List, Optional
@@ -66,7 +71,9 @@ class TerminalDashboard:
         self.total_executions = 0
         self.successful_executions = 0
         self.total_validations = 0
+        self.total_validations = 0
         self.patterns_detected: List[str] = []
+        self.opportunities: List[Dict] = []
 
         # UI state
         self._live: Optional[Live] = None
@@ -109,6 +116,9 @@ class TerminalDashboard:
 
         elif event.event_type == EventType.AGENT_STATUS_CHANGE:
             self.agent_status[event.agent] = event.payload.get("status", "idle")
+
+        elif event.event_type == EventType.ANALYSIS_OPPORTUNITY:
+            self.opportunities.append(event.payload)
 
     def _create_header(self) -> Panel:
         """Create the header panel"""
@@ -340,6 +350,35 @@ class TerminalDashboard:
             box=box.ROUNDED,
         )
 
+    def _create_opportunities_panel(self) -> Panel:
+        """Create opportunities panel"""
+        if not self.opportunities:
+            return Panel(
+                Text("No pending analysis opportunities", style="dim"),
+                title="🔍 Opportunities",
+                border_style="yellow",
+                box=box.ROUNDED,
+            )
+
+        table = Table(show_header=True, box=None, expand=True)
+        table.add_column("File", style="cyan")
+        table.add_column("Trigger", style="red")
+        table.add_column("Suggestion", style="dim")
+
+        for opp in list(self.opportunities)[-5:]:
+            table.add_row(
+                opp.get("file", "unknown"),
+                opp.get("trigger", ""),
+                opp.get("suggestion", "")
+            )
+
+        return Panel(
+            table,
+            title=f"🔍 Opportunities ({len(self.opportunities)}) [Press 'a' to approve]",
+            border_style="yellow",
+            box=box.ROUNDED,
+        )
+
     def _create_layout(self) -> Layout:
         """Create the dashboard layout"""
         layout = Layout()
@@ -362,6 +401,7 @@ class TerminalDashboard:
 
         layout["right"].split_column(
             Layout(name="validation", ratio=3),
+            Layout(name="opportunities", ratio=2),
             Layout(name="agents", ratio=2),
         )
 
@@ -375,6 +415,7 @@ class TerminalDashboard:
         layout["events"].update(self._create_event_stream())
         layout["code"].update(self._create_code_panel())
         layout["validation"].update(self._create_validation_panel())
+        layout["opportunities"].update(self._create_opportunities_panel())
         layout["agents"].update(self._create_agent_status())
         layout["footer"].update(self._create_logs_panel())
 
@@ -393,7 +434,30 @@ class TerminalDashboard:
             self._live = live
             while self._running:
                 live.update(self.render())
+                
+                # Check for input (Windows only for now)
+                if sys.platform == "win32" and msvcrt.kbhit():
+                    key = msvcrt.getch()
+                    await self._handle_input(key)
+                
                 await asyncio.sleep(refresh_rate)
+
+    async def _handle_input(self, key_bytes: bytes) -> None:
+        """Handle keyboard input"""
+        try:
+            key = key_bytes.decode('utf-8').lower()
+        except:
+            return
+
+        if key == 'a':
+            # Approve pending opportunity
+            if self.opportunities:
+                opp = self.opportunities.pop() # LIFO for now (approve newest)
+                await self.event_bus.emit(Event(
+                    event_type=EventType.ANALYSIS_APPROVED,
+                    agent=AgentType.HUMAN,
+                    payload=opp
+                ))
 
     def stop(self) -> None:
         """Stop the dashboard"""
