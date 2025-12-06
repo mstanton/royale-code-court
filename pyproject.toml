@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "code-jester"
-version = "0.4.0"
-description = "AI-Assisted Development Intelligence System - The Royal Court"
+name = "royale-code-court"
+version = "0.5.0"
+description = "AI-Assisted Development Intelligence System - Where AI code faces trial by execution"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
     {name = "Code Jester Team"}
 ]
-keywords = ["ai", "code-generation", "validation", "testing", "llm"]
+keywords = ["ai", "code-execution", "validation", "testing", "llm", "mcp", "sandbox"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -26,13 +26,11 @@ dependencies = [
     "pydantic>=2.0.0",
     "networkx>=3.0",
     "RestrictedPython>=7.0",
-    "chromadb>=0.4.0",
-    "sentence-transformers>=2.2.0",
-    "asyncio-mqtt>=0.16.0",
     "watchdog>=3.0.0",
     "typer>=0.9.0",
     "python-dotenv>=1.0.0",
     "ollama>=0.1.0",
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]
@@ -44,13 +42,32 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0.0",
 ]
+mcp = [
+    "mcp>=0.1.0",
+]
+full = [
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "asyncio-mqtt>=0.16.0",
+]
 
 [project.scripts]
 jester = "jester.main:app"
+royale-mcp = "jester.server.mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/mstanton/royale-code-court"
+Documentation = "https://github.com/mstanton/royale-code-court#readme"
+Repository = "https://github.com/mstanton/royale-code-court"
+Issues = "https://github.com/mstanton/royale-code-court/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["jester*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [tool.black]
 line-length = 100

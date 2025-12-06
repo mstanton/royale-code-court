@@ -1,20 +1,28 @@
-# Code Jester
+# Code Jester (Royale Code Court)
 
 **AI-Assisted Development Intelligence System**
 
 Code Jester transforms AI code generation from "prompt and hope" into "validate, optimize, and learn." It's a local-first, privacy-preserving system that implements a multi-agent validation pipeline where code is tested, analyzed, and learned from before presentation to developers.
 
+## Core Innovation
+
+```
+Traditional AI: Generate -> Present -> Human Tests -> Human Reports Error -> Generate Again
+Code Jester:    Generate -> Test -> Learn -> Improve -> Present Working Code
+```
+
 ## Key Features
 
 - **Code Validation Before Presentation** - All generated code is tested and validated before you see it
+- **MCP Server Integration** - Connect Claude Desktop/Cursor directly to the validation engine
 - **Automatic Pattern Learning** - Successful patterns are recognized and reused
+- **Persistent Learning Store** - SQLite-backed execution history with pattern extraction
 - **Multi-Tier Execution** - Safe code execution from static analysis to containerized sandboxes
 - **100% Local Computation** - Complete privacy with no external API calls (uses Ollama)
 - **Human-in-the-Loop** - Developer maintains strategic control at all decision points
 - **Multi-Realm Support** - Monitor and learn from multiple local projects simultaneously
-- **Open Code Integration** - Flexible warrior provider support (Claude Code or Open Code)
-- **Knowledge Graph Integration** - Architectural insights emerge from execution patterns
-- **Performance Optimization Loop** - Iteratively improves code based on runtime metrics (`jester optimize`)
+- **Security Scanning** - Detect SQL injection, command injection, and other vulnerabilities
+- **Performance Optimization Loop** - Iteratively improves code based on runtime metrics
 
 ## The Royal Court Architecture
 
@@ -37,7 +45,7 @@ Code Jester uses a royal court metaphor for its multi-agent system:
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/royale-code-court.git
+git clone https://github.com/mstanton/royale-code-court.git
 cd royale-code-court
 
 # Create virtual environment
@@ -45,7 +53,7 @@ python3.11 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install with all dependencies
-pip install -e ".[dev]"
+pip install -e ".[dev,mcp]"
 ```
 
 ### Setting up Ollama (Optional)
@@ -141,6 +149,56 @@ async def validate_code():
 asyncio.run(validate_code())
 ```
 
+## MCP Server (Claude Desktop / Cursor Integration)
+
+Code Jester includes an MCP (Model Context Protocol) server that enables AI assistants to validate code before presenting it to users.
+
+### Setup for Claude Desktop
+
+1. Install with MCP support:
+   ```bash
+   pip install -e ".[mcp]"
+   ```
+
+2. Add to your Claude Desktop config (`claude_desktop_config.json`):
+   ```json
+   {
+     "mcpServers": {
+       "royale-code-court": {
+         "command": "python",
+         "args": ["-m", "jester.server.mcp"],
+         "env": {
+           "PYTHONPATH": "/path/to/royale-code-court"
+         }
+       }
+     }
+   }
+   ```
+
+3. Restart Claude Desktop. You'll now have these tools available:
+   - `execute_code` - Execute Python in sandbox
+   - `validate_code` - Full validation pipeline
+   - `analyze_error` - Error analysis and fixes
+   - `check_security` - Security vulnerability scan
+   - `get_execution_stats` - View execution history
+
+### Available MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `execute_code` | Execute Python code in a secure sandbox with timeout |
+| `validate_code` | Full validation: syntax, patterns, security, execution |
+| `analyze_error` | Analyze error messages and suggest fixes |
+| `check_security` | Scan for security vulnerabilities |
+| `get_execution_stats` | View execution statistics and learned patterns |
+
+### Running MCP Server Manually
+
+```bash
+# Run MCP server (for testing)
+python -m jester.server.mcp
+```
+
 ## CLI Reference
 
 | Command | Description | Example |
@@ -225,14 +283,21 @@ royale-code-court/
 ├── jester/                     # Main package
 │   ├── main.py                 # CLI and RoyalCourt orchestrator
 │   ├── core/                   # Event system, models, metrics
-│   ├── agents/                 # Jester, Scribe agents
+│   ├── agents/                 # Jester, Scribe, Guard agents
 │   ├── execution/              # Code executors (REPL, container)
-│   ├── integrations/           # Ollama, Claude Code
+│   ├── server/                 # MCP server for AI integration
+│   ├── persistence/            # Learning store, pattern extraction
+│   ├── integrations/           # Ollama, Claude Code, Open Code
 │   ├── knowledge/              # Knowledge graph
-│   └── observability/          # Terminal UI
+│   └── observability/          # Terminal UI, file watcher
+├── docs/                       # Documentation
+│   ├── ARCHITECTURE.md         # System architecture
+│   └── API.md                  # API reference
+├── integrations/               # External integration configs
+│   └── claude/                 # Claude Desktop config
 ├── examples/                   # Usage examples
 ├── tests/                      # Unit tests
-├── SPEC_0.0.1.md              # Full specification
+├── CHANGELOG.md                # Version history
 └── pyproject.toml             # Project configuration
 ```
 
@@ -277,7 +342,9 @@ mypy jester/
 
 ## Documentation
 
-For detailed architecture and design decisions, see [SPEC_0.0.2.md](SPEC_0.0.2.md).
+- [Architecture Guide](docs/ARCHITECTURE.md) - System design and components
+- [API Reference](docs/API.md) - MCP tools, Python API, CLI reference
+- [Specification](SPEC_0.0.2.md) - Detailed design decisions
 
 ## License
 
@@ -285,12 +352,13 @@ MIT License
 
 ## Contributing
 
-1. Read the [specification](SPEC_0.0.1.md) to understand the architecture
+1. Read the [architecture guide](docs/ARCHITECTURE.md) to understand the system
 2. Fork the repository
 3. Create a feature branch
 4. Make your changes with tests
-5. Submit a pull request
+5. Run tests: `pytest tests/ -v`
+6. Submit a pull request
 
 ---
 
-*Code Jester - Because every royal court needs someone to test the king's code.*
+*Code Jester - Where AI code faces trial by execution.*
