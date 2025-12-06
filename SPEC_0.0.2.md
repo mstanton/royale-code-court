@@ -46,8 +46,16 @@ The system uses a **metaphorical architecture** where different AI agents play s
 
 ### ⚔️ **The WARRIOR (Code Integrator)**
 - **Technology:** Pluggable Provider (Claude Code or Open Code).
-- **Role:** Applies validated changes to the filesystem.
+- **Role:** The Sword. Applies validated changes to the filesystem.
 - **Configuration:** Selectable via `jester.toml` (`warrior_provider`).
+
+### 🛡️ **The GUARD (Royal Guard)**
+- **Technology:** Python `sys.settrace` (Step Debugger).
+- **Role:** The Shield / Bumpers.
+- **Function:** Provides realtime "defensive" guard rails.
+- **Modes:**
+    - **Strict (Defensive):** Enforces hard limits (loops, memory, types) from the start.
+    - **Learning (Exploratory):** Relaxes rules to allow risky innovation ("higher potential risks").
 
 ### 👤 **The HUMAN (Strategic Director)**
 - **Technology:** Terminal UI / CLI.
@@ -90,6 +98,36 @@ A closed-loop system for performance tuning:
 ```bash
 jester optimize "Calculate Fibonacci sequence" --threshold 100
 ```
+
+---
+
+### The Squad Workflow (Phase 5)
+A stateful orchestration of the code layer:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       The SQUAD                             │
+│                                                             │
+│  ┌───────────┐       ┌───────────┐       ┌───────────┐      │
+│  │  WARRIOR  │──────▶│   GUARD   │──────▶│   JESTER  │      │
+│  │ (Action)  │       │ (Defense) │       │(Validation)│     │
+│  └───────────┘       └───────────┘       └───────────┘      │
+│        ▲                   │                   │            │
+│        │                   │ Realtime          │ Final      │
+│        │                   ▼ Feedback          ▼ Verdict    │
+│        │             ┌───────────┐       ┌───────────┐      │
+│        └─────────────│ OPEN CODE │◀──────│  SCRIBE   │      │
+│           Command    │ (Context) │       │(Knowledge)│      │
+│                      └───────────┘       └───────────┘      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **Warrior** initiates action (The Sword).
+2. **Guard** watches every step (The Shield/Bumpers). 
+   - *Strict Mode*: Blocks immediately on violation.
+   - *Learning Mode*: Observes and advises (allows "risk").
+3. **Jester** validates the final result (The Judge).
+4. **Scribe** records the entire session (The Historian).
 
 ---
 

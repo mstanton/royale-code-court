@@ -13,6 +13,12 @@ from ..core.models import ExecutionResult, ExecutionTier, CodeSubmission
 from ..core.event_stream import EventStream
 from .repl_executor import REPLExecutor
 from .container_executor import ContainerExecutor
+try:
+    from .tracer import ExecutionTracer
+except ImportError:
+    ExecutionTracer = None
+# Also need Callable
+from typing import Callable, Dict, Any
 
 
 # Dangerous patterns that require container execution
@@ -151,6 +157,7 @@ class CodeExecutor:
         language: str = "python",
         force_tier: Optional[ExecutionTier] = None,
         timeout: Optional[float] = None,
+        guard_callback: Optional[Callable[[Dict], None]] = None,
     ) -> ExecutionResult:
         """
         Execute code using the appropriate tier.
@@ -200,8 +207,11 @@ class CodeExecutor:
 
         # Execute based on tier
         if tier == ExecutionTier.REPL:
-            result = await self._execute_repl(code, timeout)
+            result = await self._execute_repl(code, timeout, guard_callback)
         else:
+            if guard_callback:
+                # TODO: Implement tracing for container execution if possible
+                pass
             result = await self._execute_container(code, language, timeout)
 
         # Set execution time
@@ -220,9 +230,14 @@ class CodeExecutor:
 
         return result
 
-    async def _execute_repl(self, code: str, timeout: float) -> ExecutionResult:
+    async def _execute_repl(
+        self, 
+        code: str, 
+        timeout: float, 
+        guard_callback: Optional[Callable[[Dict], None]] = None
+    ) -> ExecutionResult:
         """Execute using REPL (RestrictedPython)"""
-        return await self.repl_executor.execute(code, timeout)
+        return await self.repl_executor.execute(code, timeout, guard_callback)
 
     async def _execute_container(
         self, code: str, language: str, timeout: float

@@ -23,7 +23,9 @@ from ..core.models import (
 from ..core.event_stream import EventBus
 from ..core.metrics import MetricsCollector, ExecutionMetric, ValidationMetric
 from ..execution.executor import CodeExecutor
+from ..execution.tracer import ExecutionTracer
 from .base_agent import BaseAgent
+from .guard import RoyalGuard, GuardMode
 
 
 # Common patterns the Jester can detect
@@ -78,6 +80,10 @@ class JesterAgent(BaseAgent):
         super().__init__(AgentType.JESTER, event_bus)
         self.executor = executor or CodeExecutor(self.event_stream)
         self.metrics = metrics or MetricsCollector()
+        
+        # Initialize Royal Guard (The Bumper)
+        self.guard = RoyalGuard(event_bus, mode=GuardMode.STRICT) # Default to Strict? Or make configurable?
+        self.tracer = ExecutionTracer(self.guard.handle_trace)
 
         # Subscribe to relevant events
         self.subscribe([
@@ -149,7 +155,9 @@ class JesterAgent(BaseAgent):
 
         # Stage 5: Execution
         await self.thinking("Executing code...")
-        exec_result = await self.executor.execute(code, language)
+        
+        # Use Guard Tracing if supported by tier (REPL only for now)
+        exec_result = await self.executor.execute(code, language, guard_callback=self.guard.handle_trace)
         result.executes = exec_result.success
         result.execution_result = exec_result
 
