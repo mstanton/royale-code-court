@@ -11,7 +11,10 @@ Code Jester transforms AI code generation from "prompt and hope" into "validate,
 - **Multi-Tier Execution** - Safe code execution from static analysis to containerized sandboxes
 - **100% Local Computation** - Complete privacy with no external API calls (uses Ollama)
 - **Human-in-the-Loop** - Developer maintains strategic control at all decision points
+- **Multi-Realm Support** - Monitor and learn from multiple local projects simultaneously
+- **Open Code Integration** - Flexible warrior provider support (Claude Code or Open Code)
 - **Knowledge Graph Integration** - Architectural insights emerge from execution patterns
+- **Performance Optimization Loop** - Iteratively improves code based on runtime metrics (`jester optimize`)
 
 ## The Royal Court Architecture
 
@@ -22,7 +25,7 @@ Code Jester uses a royal court metaphor for its multi-agent system:
 | **King** | Code Generator | Local LLM via Ollama generates initial solutions |
 | **Jester** | Validator/Tester | Tests code, finds bugs, detects patterns and security issues |
 | **Scribe** | Knowledge Keeper | Observes activity, builds knowledge graph, provides insights |
-| **Warrior** | Code Integrator | Applies validated changes to codebase (Claude Code) |
+| **Warrior** | Code Integrator | Applies validated changes to codebase via Claude Code or Open Code |
 | **Human** | Strategic Director | Provides direction, approves changes, guides learning |
 
 ## Requirements
@@ -76,6 +79,12 @@ jester repl
 
 # Real-time dashboard
 jester dashboard
+
+# Multi-Realm Watcher
+jester watch /path/to/project
+
+# Optimization Loop
+jester optimize "calculate fibonacci efficiently" --threshold 100
 
 # Quick demo
 jester demo
@@ -140,6 +149,8 @@ asyncio.run(validate_code())
 | `generate` | Generate code with LLM and validate | `jester generate "prompt" --model gemma3:4b` |
 | `repl` | Interactive validation REPL | `jester repl` |
 | `dashboard` | Real-time event stream UI | `jester dashboard` |
+| `watch` | Monitor specific path or multiple realms | `jester watch .` |
+| `optimize` | Iterative performance optimization | `jester optimize "task"` |
 | `demo` | Run demonstration | `jester demo` |
 
 ### REPL Commands
@@ -157,9 +168,27 @@ court = RoyalCourt(
     ollama_model="gemma3:4b",  # LLM model
     ollama_url="http://localhost:11434",  # Ollama URL
     enable_scribe=True,  # Knowledge keeper
-    enable_warrior=False,  # Claude Code integration
+    enable_warrior=False,  # Claude Code/Open Code integration
     working_dir=None,  # Working directory
 )
+```
+
+### Multi-Realm Configuration
+
+Create a `jester.toml` file to configure multiple realms (projects) to watch:
+
+```toml
+[jester]
+model = "gemma3:4b"
+warrior_provider = "open-code" # or "claude-code"
+
+[[jester.realms]]
+name = "Backend"
+path = "/path/to/backend"
+
+[[jester.realms]]
+name = "Frontend"
+path = "/path/to/frontend"
 ```
 
 ### Environment Variables
@@ -248,7 +277,7 @@ mypy jester/
 
 ## Documentation
 
-For detailed architecture and design decisions, see [SPEC_0.0.1.md](SPEC_0.0.1.md).
+For detailed architecture and design decisions, see [SPEC_0.0.2.md](SPEC_0.0.2.md).
 
 ## License
 
