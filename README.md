@@ -23,6 +23,10 @@ Code Jester:    Generate -> Test -> Learn -> Improve -> Present Working Code
 - **Multi-Realm Support** - Monitor and learn from multiple local projects simultaneously
 - **Security Scanning** - Detect SQL injection, command injection, and other vulnerabilities
 - **Performance Optimization Loop** - Iteratively improves code based on runtime metrics
+- **The Royal Guard** - Real-time execution tracing and infinite loop protection
+- **Multilingual Support** - Validate Python, JavaScript, and Bash
+- **The Dungeon** - Containerized execution (Docker) for complete isolation
+- **The Laboratory** - Interactive scratchpad for saving and analyzing snippets
 
 ## The Royal Court Architecture
 
@@ -96,6 +100,17 @@ jester optimize "calculate fibonacci efficiently" --threshold 100
 
 # Quick demo
 jester demo
+
+# Multilingual Validation
+jester validate "console.log('Hello JS')" --lang javascript
+jester validate "echo 'Hello Bash'" --lang bash
+
+# The Laboratory
+jester lab
+# Inside lab:
+# > save myscript print("hello")
+# > run myscript
+# > trend
 ```
 
 ### Python API
@@ -266,8 +281,8 @@ Code Jester uses tiered execution for safety and performance:
 | Tier | Method | Speed | Use Case |
 |------|--------|-------|----------|
 | **Static** | AST Analysis | <5ms | Syntax, patterns |
-| **REPL** | RestrictedPython | 10-50ms | Safe execution |
-| **Container** | Docker/Podman | 50-200ms | Full isolation |
+| **REPL** | RestrictedPython/Node/Bash | 10-50ms | Safe execution, lightweight |
+| **Container** | Docker/Podman | 50-200ms | Full isolation, dependencies (`pip install`) |
 
 ## Security Features
 
